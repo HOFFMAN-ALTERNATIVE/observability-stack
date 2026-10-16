@@ -1,0 +1,8 @@
+{{ define "telegram.message" -}}
+{{ if eq .Status "firing" }}🔥 <b>FIRING</b>{{ else }}✅ <b>RESOLVED</b>{{ end }} · {{ .CommonLabels.alertname }} ({{ len .Alerts }})
+{{ range .Alerts -}}
+<b>{{ .Labels.severity | toUpper }}</b> {{ .Annotations.summary }}
+{{ .Annotations.description }}
+<i>{{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}</i>
+{{ end -}}
+{{- end }}

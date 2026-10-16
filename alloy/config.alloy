@@ -1,0 +1,71 @@
+// Grafana Alloy — log shipping to Loki (successor of the deprecated Promtail).
+
+logging {
+  level  = "warn"
+  format = "logfmt"
+}
+
+// ---------- Docker container logs ----------
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.containers.output
+  forward_to    = [loki.process.default.receiver]
+  relabel_rules = discovery.relabel.containers.rules
+}
+
+// ---------- Host log files ----------
+local.file_match "host" {
+  path_targets = [
+    { "__path__" = "/var/log/host/syslog", "job" = "syslog" },
+    { "__path__" = "/var/log/host/auth.log", "job" = "auth" },
+    { "__path__" = "/var/log/host/nginx/*.log", "job" = "nginx" },
+  ]
+}
+
+loki.source.file "host" {
+  targets    = local.file_match.host.targets
+  forward_to = [loki.process.default.receiver]
+}
+
+// ---------- Processing ----------
+loki.process "default" {
+  // Extract log level from common formats (logfmt / JSON / plain).
+  stage.regex {
+    expression = "(?i)(level=|\"level\":\\s*\")(?P<level>debug|info|warn|warning|error|fatal|critical)"
+  }
+  stage.labels {
+    values = { level = "" }
+  }
+  stage.static_labels {
+    values = { host = constants.hostname }
+  }
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

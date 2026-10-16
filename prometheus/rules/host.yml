@@ -1,0 +1,49 @@
+groups:
+  - name: host
+    rules:
+      - record: instance:node_cpu_utilisation:rate5m
+        expr: 1 - avg without (cpu, mode) (rate(node_cpu_seconds_total{mode="idle"}[5m]))
+
+      - record: instance:node_memory_utilisation:ratio
+        expr: 1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)
+
+      - alert: HostHighCpu
+        expr: instance:node_cpu_utilisation:rate5m > 0.9
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "High CPU on {{ $labels.instance }}"
+          description: "CPU utilisation is {{ $value | humanizePercentage }} for 10 minutes."
+
+      - alert: HostHighMemory
+        expr: instance:node_memory_utilisation:ratio > 0.9
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory utilisation is {{ $value | humanizePercentage }}."
+
+      - alert: HostDiskWillFillIn24h
+        expr: |
+          predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}[6h], 24 * 3600) < 0
+          and node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes < 0.25
+        for: 30m
+        labels: { severity: critical }
+        annotations:
+          summary: "Disk {{ $labels.mountpoint }} on {{ $labels.instance }} will fill within 24h"
+          description: "Only {{ $value | humanize1024 }}B predicted free in 24h."
+
+      - alert: HostDiskAlmostFull
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes < 0.1
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Disk {{ $labels.mountpoint }} almost full on {{ $labels.instance }}"
+          description: "{{ $value | humanizePercentage }} space left."
+
+      - alert: HostOomKill
+        expr: increase(node_vmstat_oom_kill[5m]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "OOM kill on {{ $labels.instance }}"
+          description: "The kernel OOM killer terminated a process."
