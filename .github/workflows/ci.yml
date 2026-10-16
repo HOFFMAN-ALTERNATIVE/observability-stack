@@ -1,0 +1,55 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose config
+        run: cp .env.example .env && docker compose config --quiet
+      - name: promtool check config + rules + rule unit tests
+        run: |
+          docker run --rm -v "$PWD:/w:ro" -w /w --entrypoint sh prom/prometheus:v3.15.0 -c '
+            set -e
+            mkdir -p /tmp/p && cp -r prometheus/* /tmp/p/
+            sed "s#/etc/prometheus/rules#/tmp/p/rules#" prometheus/prometheus.yml > /tmp/p/prometheus.yml
+            promtool check config /tmp/p/prometheus.yml
+            promtool check rules prometheus/rules/*.yml
+            promtool test rules tests/host_test.yml'
+      - name: amtool check-config
+        run: |
+          mkdir -p /tmp/am && sed 's/__TELEGRAM_CHAT_ID__/123/; s#/etc/alertmanager/templates#/am/templates#' alertmanager/alertmanager.yml > /tmp/am/alertmanager.yml
+          cp -r alertmanager/templates /tmp/am/
+          docker run --rm -v /tmp/am:/am:ro --entrypoint amtool prom/alertmanager:v0.34.1 check-config /am/alertmanager.yml
+      - name: alloy config
+        run: docker run --rm -v "$PWD/alloy:/etc/alloy:ro" grafana/alloy:v1.20.1 fmt /etc/alloy/config.alloy > /dev/null
+      - name: dashboards are valid JSON
+        run: for f in grafana/dashboards/*.json; do jq -e '.uid and .panels' "$f" > /dev/null; done
+      - name: shellcheck
+        run: shellcheck scripts/*.sh && shellcheck -s sh alertmanager/entrypoint.sh
+
+  e2e:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start stack
+        run: cp .env.example .env && docker compose up -d --wait --wait-timeout 240
+      - name: Smoke test
+        run: ./scripts/smoke-test.sh
+      - name: Logs on failure
+        if: failure()
+        run: docker compose ps -a && docker compose logs --tail=80
+      - name: Screenshot dashboard
+        run: |
+          cd scripts && npm init -y > /dev/null && npm i playwright@1.48.2 > /dev/null && npx playwright install --with-deps chromium > /dev/null
+          cd .. && node scripts/screenshot.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: grafana-dashboard, path: docs/dashboard.png, if-no-files-found: ignore }
+      - if: always()
+        run: docker compose down -v
