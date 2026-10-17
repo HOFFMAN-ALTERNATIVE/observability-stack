@@ -10,6 +10,10 @@
 
 Prometheus · Alertmanager (Telegram) · Grafana (provisioned) · Loki · Grafana Alloy · node-exporter · cAdvisor
 
+![Grafana dashboard](docs/dashboard.png)
+
+*Provisioned “Host & Containers” dashboard — captured automatically by CI on a freshly booted stack.*
+
 ## Why
 
 Setting up monitoring by hand means a day of glue: datasources, dashboards, alert rules nobody tested, a log shipper that silently
