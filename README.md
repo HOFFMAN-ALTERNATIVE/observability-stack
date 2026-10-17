@@ -21,7 +21,7 @@ The trade-off is scope: one Prometheus and one Loki on local volumes, no HA, no 
 - **Metrics:** host (node-exporter) and per-container (cAdvisor) metrics, self-monitoring of every component
 - **Logs:** Docker container logs + host logs (syslog, auth, nginx) shipped by **Grafana Alloy**, labelled by container / compose service / level
 - **Dashboards:** "Host & Containers" dashboard provisioned from JSON: CPU, memory, disk, network, I/O, container CPU/RAM, live error logs
-- **Alerting:** 9 rules (CPU, memory, disk-fill prediction with `predict_linear`, OOM kills, target down, restart loops, container memory limits, Watchdog heartbeat), routed to **Telegram** with an HTML template; critical inhibits warning
+- **Alerting:** 9 rules (CPU, memory, disk-fill prediction with `predict_linear`, OOM kills, target down, restart loops, container memory limits, Watchdog heartbeat), routed to **Telegram** with an HTML template; critical inhibits warning; Watchdog optionally pings an external dead-man's switch
 - **Secure defaults:** ports bound to `127.0.0.1`, Grafana sign-up/anonymous disabled, required admin password, Telegram token never stored in config files, log rotation on every container, retention limits
 - **Tested:** `promtool test rules` unit tests for 3 of the 9 alerts (HostHighMemory, HostDiskAlmostFull, TargetDown), `amtool check-config`, `alloy fmt`, `docker compose config`, and a full-stack smoke test in CI
 
@@ -82,6 +82,19 @@ CRITICAL Disk / on host will fill within 24h
 Only 1.2GiB predicted free in 24h.
 ```
 
+## Dead-man's switch
+
+Alerts cannot tell you that the alerting itself is down. The always-firing `Watchdog`
+alert covers that: set `DEADMANS_SWITCH_URL` in `.env` to a ping URL from
+[healthchecks.io](https://healthchecks.io) or any similar service, and Alertmanager
+posts to it every 5 minutes. Configure the check with a 5 minute period and a grace
+time of 5 to 10 minutes. If Prometheus, Alertmanager or the whole host dies, the pings
+stop and that service alerts you through its own channel.
+
+The URL is written to a private file at start and read via `url_file`, like the
+Telegram token. Leave it empty and the Watchdog is dropped. CI runs a drill against a
+stand-in receiver to check the pings arrive.
+
 ## Adding your services
 
 ```yaml
@@ -103,7 +116,7 @@ alertmanager/ alertmanager.yml, templates/telegram.tmpl, entrypoint.sh
 grafana/      provisioning/ (datasources, dashboards), dashboards/*.json
 loki/         loki.yml (TSDB schema v13, 7-day retention, compactor)
 alloy/        config.alloy
-tests/        promtool rule unit tests
+tests/        promtool rule unit tests, stand-in dead-man's switch for CI
 scripts/      smoke-test.sh, screenshot.mjs
 ```
 

@@ -22,7 +22,7 @@ jobs:
             promtool test rules tests/host_test.yml'
       - name: amtool check-config
         run: |
-          mkdir -p /tmp/am && sed 's/__TELEGRAM_CHAT_ID__/123/; s#/etc/alertmanager/templates#/am/templates#' alertmanager/alertmanager.yml > /tmp/am/alertmanager.yml
+          mkdir -p /tmp/am && sed 's/__TELEGRAM_CHAT_ID__/123/; s/__WATCHDOG_RECEIVER__/deadmans-switch/; s#/etc/alertmanager/templates#/am/templates#' alertmanager/alertmanager.yml > /tmp/am/alertmanager.yml
           cp -r alertmanager/templates /tmp/am/
           docker run --rm -v /tmp/am:/am:ro --entrypoint amtool prom/alertmanager:v0.34.1 check-config /am/alertmanager.yml
       - name: alloy config
@@ -41,9 +41,17 @@ jobs:
         run: cp .env.example .env && docker compose up -d --wait --wait-timeout 240
       - name: Smoke test
         run: ./scripts/smoke-test.sh
+      - name: Dead-man's switch drill
+        run: |
+          docker run -d --name dms --network observability_obs \
+            -v "$PWD/tests/deadmans_receiver.py:/r.py:ro" python:3.12-alpine python /r.py
+          DEADMANS_SWITCH_URL=http://dms:8080/ping/ci-check docker compose up -d --wait alertmanager
+          docker compose logs alertmanager | grep 'watchdog receiver: deadmans-switch'
+          for _ in $(seq 60); do docker logs dms 2>&1 | grep 'POST /ping/ci-check' && break; sleep 3; done
+          docker logs dms 2>&1 | grep 'POST /ping/ci-check'
       - name: Logs on failure
         if: failure()
-        run: docker compose ps -a && docker compose logs --tail=80
+        run: docker compose ps -a && docker compose logs --tail=80 && (docker logs dms || true)
       - name: Screenshot dashboard
         run: |
           cd scripts && npm init -y > /dev/null && npm i playwright@1.48.2 > /dev/null && npx playwright install --with-deps chromium > /dev/null
