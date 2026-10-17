@@ -115,6 +115,15 @@ promtool test rules tests/host_test.yml
 amtool check-config alertmanager/alertmanager.yml
 ```
 
+## Design decisions
+
+- [ADR 0001](docs/adr/0001-alloy-for-log-shipping.md): Grafana Alloy ships logs, because
+  Promtail is end-of-life and Alloy is its supported successor.
+- [ADR 0002](docs/adr/0002-telegram-token-via-file.md): the Telegram token is written at
+  start to a private file read through `bot_token_file`, so it never lands in a tracked file.
+- [ADR 0003](docs/adr/0003-single-node-local-storage.md): one Prometheus and one Loki on
+  local volumes with retention limits. No HA, by choice, for one to a few hosts.
+
 ## Limits
 
 - Single Prometheus and Loki on local Docker volumes. No HA, no remote storage; losing the host loses the history.
