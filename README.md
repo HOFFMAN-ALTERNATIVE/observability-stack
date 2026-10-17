@@ -6,29 +6,24 @@
 ![Loki](https://img.shields.io/badge/Loki-3.7-F5A623)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-**Production-ready metrics, logs and alerting for a single server or small fleet — one `docker compose up`.**
+Metrics, logs and alerting for a single server or a small fleet, started with one `docker compose up` and verified end to end in CI. Every push boots the full stack and checks that every scrape target is up, rules evaluate, Grafana datasources are healthy, container logs arrive in Loki, and a test alert reaches Alertmanager.
 
 Prometheus · Alertmanager (Telegram) · Grafana (provisioned) · Loki · Grafana Alloy · node-exporter · cAdvisor
 
 ![Grafana dashboard](docs/dashboard.png)
 
-*Provisioned “Host & Containers” dashboard — captured automatically by CI on a freshly booted stack.*
+*The provisioned "Host & Containers" dashboard, captured by CI on a freshly booted stack.*
 
-## Why
-
-Setting up monitoring by hand means a day of glue: datasources, dashboards, alert rules nobody tested, a log shipper that silently
-drops data. This stack is **provisioned as code and verified end-to-end in CI**: every push boots the full stack, checks
-that every scrape target is up, rules evaluate, Grafana datasources are healthy, container logs arrive in Loki and an alert
-travels all the way to Alertmanager.
+The trade-off is scope: one Prometheus and one Loki on local volumes, no HA, no long-term object storage. That is the right size for one to a handful of hosts, and the wrong one for a large fleet.
 
 ## Features
 
-- **Metrics** — host (node-exporter) and per-container (cAdvisor) metrics, self-monitoring of every component
-- **Logs** — Docker container logs + host logs (syslog, auth, nginx) shipped by **Grafana Alloy**, labelled by container / compose service / level
-- **Dashboards** — "Host & Containers" dashboard provisioned from JSON: CPU, memory, disk, network, I/O, container CPU/RAM, live error logs
-- **Alerting** — tested rules (CPU, memory, disk-fill prediction with `predict_linear`, OOM kills, target down, restart loops, container memory limits, Watchdog heartbeat), routed to **Telegram** with an HTML template; critical inhibits warning
-- **Secure defaults** — ports bound to `127.0.0.1`, Grafana sign-up/anonymous disabled, required admin password, Telegram token never stored in config files, log rotation on every container, retention limits
-- **Tested** — `promtool test rules` unit tests for alert rules, `amtool check-config`, `alloy fmt`, `docker compose config`, and a full-stack smoke test in CI
+- **Metrics:** host (node-exporter) and per-container (cAdvisor) metrics, self-monitoring of every component
+- **Logs:** Docker container logs + host logs (syslog, auth, nginx) shipped by **Grafana Alloy**, labelled by container / compose service / level
+- **Dashboards:** "Host & Containers" dashboard provisioned from JSON: CPU, memory, disk, network, I/O, container CPU/RAM, live error logs
+- **Alerting:** 9 rules (CPU, memory, disk-fill prediction with `predict_linear`, OOM kills, target down, restart loops, container memory limits, Watchdog heartbeat), routed to **Telegram** with an HTML template; critical inhibits warning
+- **Secure defaults:** ports bound to `127.0.0.1`, Grafana sign-up/anonymous disabled, required admin password, Telegram token never stored in config files, log rotation on every container, retention limits
+- **Tested:** `promtool test rules` unit tests for 3 of the 9 alerts (HostHighMemory, HostDiskAlmostFull, TargetDown), `amtool check-config`, `alloy fmt`, `docker compose config`, and a full-stack smoke test in CI
 
 > **Note:** Promtail reached end-of-life; Grafana Alloy is its official successor and is used here.
 
@@ -120,6 +115,15 @@ promtool test rules tests/host_test.yml
 amtool check-config alertmanager/alertmanager.yml
 ```
 
+## Limits
+
+- Single Prometheus and Loki on local Docker volumes. No HA, no remote storage; losing the host loses the history.
+- cAdvisor runs `privileged` and Alloy mounts the Docker socket read-only. Both are standard for these tools, and both mean a compromise of those containers is a compromise of the host. Run the stack only on hosts you already trust it with.
+- 6 of the 9 alert rules have no unit test yet; they are covered only by `promtool check rules` and the smoke test that loads them.
+- Grafana is plain HTTP on `127.0.0.1`. Put it behind a reverse proxy with TLS before exposing it.
+
+Security notes: [SECURITY.md](SECURITY.md).
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).

@@ -2,6 +2,7 @@ name: observability
 
 x-defaults: &defaults
   restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]
   networks: [obs]
   logging:
     driver: json-file
