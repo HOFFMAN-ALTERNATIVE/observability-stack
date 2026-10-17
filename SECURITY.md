@@ -6,10 +6,10 @@ Use GitHub's private "Report a vulnerability" button on this repository. I aim t
 
 ## Threat model
 
-- **Assets:** host metrics and logs (auth logs included), the Grafana admin account, the Telegram bot token.
+- **Assets:** host metrics and logs (auth logs included), the Grafana admin account, the Telegram bot token, the dead-man's switch ping URL.
 - **Actors:** anyone who can reach the host's ports, and any compromised container on the host.
 - **Entry points:** published ports, the Docker socket, log contents shipped to Loki.
-- **Defaults that matter:** every port binds to `127.0.0.1` unless `BIND_ADDR` is changed; Grafana sign-up and anonymous access are off and an admin password is required; the Telegram token is read from the environment, never written into config files; all images are pinned to versions; `no-new-privileges` on every service; log rotation on every container.
+- **Defaults that matter:** every port binds to `127.0.0.1` unless `BIND_ADDR` is changed; Grafana sign-up and anonymous access are off and an admin password is required; the Telegram token and the dead-man's switch URL are read from the environment, never written into config files; all images are pinned to versions; `no-new-privileges` on every service; log rotation on every container.
 - **Known high-privilege pieces:** cAdvisor runs privileged and Alloy mounts the Docker socket read-only. Read-only on the socket does not limit the Docker API, so treat Alloy as root-equivalent.
 
 ## Not provided

@@ -22,9 +22,11 @@ of keeping history after a total host loss.
 ## Consequences
 - Prometheus keeps 15 days by default (`PROMETHEUS_RETENTION`), Loki keeps 7 days
   through the compactor. Disk use stays bounded.
-- No HA. If the host dies, alerting from it dies too. The always-firing Watchdog alert
-  is routed to a blackhole today; pointing it at an external dead-man's switch is
-  the cheap fix and is left to the operator.
+- No HA. If the host dies, alerting from it dies too. Setting `DEADMANS_SWITCH_URL`
+  sends the always-firing Watchdog alert to an external dead-man's switch every
+  5 minutes, so a dead host or a broken pipeline is noticed from outside.
+  (Resolved 2026-10-17. The first version of this ADR noted that Watchdog went to a
+  blackhole and left this to the operator.)
 - Loki uses the TSDB index with schema v13, so moving to object storage later is a
   config change, not a re-index.
 - Revisit when there are more hosts than one Prometheus can scrape comfortably, or

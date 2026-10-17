@@ -1,5 +1,6 @@
-# Alertmanager config. The Telegram token is NOT stored here: entrypoint.sh writes it
-# from $TELEGRAM_BOT_TOKEN into a file read via bot_token_file, and substitutes the chat id.
+# Alertmanager config. The Telegram token and the dead-man's switch URL are NOT stored
+# here: entrypoint.sh writes them from the environment into private files, substitutes
+# the chat id and selects the Watchdog receiver.
 global:
   resolve_timeout: 5m
 
@@ -13,8 +14,14 @@ route:
   group_interval: 5m
   repeat_interval: 4h
   routes:
+    # Always-firing heartbeat. With DEADMANS_SWITCH_URL set it is sent to an external
+    # dead-man's switch every 5 minutes; when the pings stop, that service alerts you.
+    # Without the URL it goes to the blackhole. entrypoint.sh picks the receiver.
     - matchers: [alertname = "Watchdog"]
-      receiver: blackhole
+      receiver: __WATCHDOG_RECEIVER__
+      group_wait: 0s
+      group_interval: 5m
+      repeat_interval: 5m
     - matchers: [severity = "critical"]
       receiver: telegram
       repeat_interval: 1h
@@ -26,6 +33,12 @@ inhibit_rules:
 
 receivers:
   - name: blackhole
+  - name: deadmans-switch
+    webhook_configs:
+      # The URL usually embeds a secret check id, so it is read from a file written by
+      # entrypoint.sh, not stored here.
+      - url_file: /tmp/deadmans_switch_url
+        send_resolved: false
   - name: telegram
     telegram_configs:
       - bot_token_file: /tmp/telegram_token
